@@ -1,0 +1,41 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1.Clone
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2. Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18 
+
+      # 3. Dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Newman 
+      - name: Run Newman tests
+        run: npm run newman-test
+
+      # 5. Cucumber 
+      - name: Run Cucumber tests
+        run: npm test
+
+      
+      - name: Build Project
+        run: npm run build

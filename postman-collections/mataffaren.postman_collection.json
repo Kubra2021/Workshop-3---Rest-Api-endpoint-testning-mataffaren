@@ -1,0 +1,1938 @@
+{
+	"info": {
+		"_postman_id": "e2bc1f3c-b086-4cf6-8420-627fdcbcb169",
+		"name": "mataffaren",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "27088772"
+	},
+	"item": [
+		{
+			"name": "Get categories",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Get the data from the response unpacked from json",
+							"let responseData = pm.response.json();",
+							"",
+							"// Check that the status code is 200 (OK)",
+							"pm.test('The status code of the response should be 200', () => {",
+							"  pm.expect(pm.response).to.have.status(200);",
+							"});",
+							"",
+							"// Check that we have a response time of < 1 second",
+							"pm.test('The response time should be below 1 second', () => {",
+							"    pm.expect(pm.response.responseTime).to.be.below(1000);",
+							"})",
+							"",
+							"// Check that there are at least 10 main categories (children)",
+							"pm.test('There should be at least 10 main categories', () => {",
+							"  pm.expect(responseData.children.length).to.be.at.least(10);",
+							"});",
+							"",
+							"// Check that each main category has the properites title and url",
+							"pm.test('Each main category should have the properties title and url', () => {",
+							"    for(let category of responseData.children){",
+							"        // an empty string is falsy -> convert to false using !!",
+							"        // a string with content is truthy -> convert to true using !!",
+							"        pm.expect(!!category.title).to.be.true;",
+							"        pm.expect(!!category.url).to.be.true;",
+							"        // check that datatype is string for both title and url",
+							"        pm.expect(category.title).to.be.string;",
+							"        pm.expect(category.url).to.be.string;",
+							"    }",
+							"});",
+							"",
+							"// Save the responseData as an environment variable",
+							"pm.environment.set('categoryData', responseData);",
+							"",
+							"// A counter for products within a main category to fecth",
+							"pm.variables.set('categoryCounter', 0);",
+							"",
+							"pm.variables.set('subCategoryCounter', 0);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Set the domain",
+							"pm.environment.set('domain', 'http://localhost:4000');"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/leftMenu/categorytree",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"leftMenu",
+						"categorytree"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Products Sorted by Price Ascending",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							"// Retrieve category data from environment variables\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"\r",
+							"// Check if categoryCounter is initialized in the environment\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"if (categoryCounter === undefined) {\r",
+							"    categoryCounter = 0; \r",
+							"    pm.environment.set('categoryCounter', categoryCounter); \r",
+							"}\r",
+							"\r",
+							"// Verify that categories and categoryCounter are valid\r",
+							"if (!categories || !categories.children || categories.children.length === 0) {\r",
+							"    console.error('Error: categories data is empty or malformed!');\r",
+							"    return;\r",
+							"}\r",
+							"\r",
+							"if (categoryCounter >= categories.children.length) {\r",
+							"    console.log(\"All categories have been processed.\");\r",
+							"    pm.execution.setNextRequest(null);  // End if no more categories\r",
+							"} else {\r",
+							"    // Retrieve the URL part for the current category and set it as an environment variable\r",
+							"    let urlCategoryPart = categories.children[categoryCounter].url;\r",
+							"    pm.environment.set('urlCategoryPart', urlCategoryPart);\r",
+							"    console.log('URL Part for current category:', urlCategoryPart);\r",
+							"\r",
+							"    // Initialize pageNumber only once at the beginning of each category\r",
+							"    if (!pm.environment.get(\"currentPage\")) {\r",
+							"        pm.environment.set(\"currentPage\", 0);\r",
+							"        console.log(\"Page number initialized to 0 for new category.\");\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"let products = responseData.results;\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"\r",
+							"// Check that the sort parameter is set to \"price-asc\"\r",
+							"pm.test('Sort parameter should be set to price-asc', () => {\r",
+							"    let selectedSort = responseData.sorts.find(sort => sort.code === 'price-asc');\r",
+							"    pm.expect(selectedSort.selected).to.be.true;\r",
+							"});\r",
+							"\r",
+							"// Check that products are sorted by \"priceValue\" field in ascending order\r",
+							"pm.test('Products should be sorted by price in ascending order (cheapest to most expensive)', () => {\r",
+							"    for ( let i = 0; i < products.length - 1; i++ ) {\r",
+							"    // Determine the current product's price\r",
+							"    let currentPrice;\r",
+							"    if ( products[ i ].potentialPromotions && products[ i ].potentialPromotions.length > 0 ) {\r",
+							"      const promotionPrice = products[ i ].potentialPromotions[ 0 ].price;\r",
+							"      currentPrice = promotionPrice && promotionPrice.value ? promotionPrice.value : products[ i ].priceValue;\r",
+							"    } else {\r",
+							"      currentPrice = products[ i ].priceValue;\r",
+							"    }\r",
+							"\r",
+							"    // Determine the next product's price\r",
+							"    let nextPrice;\r",
+							"    if ( products[ i + 1 ].potentialPromotions && products[ i + 1 ].potentialPromotions.length > 0 ) {\r",
+							"      const promotionPrice = products[ i + 1 ].potentialPromotions[ 0 ].price;\r",
+							"      nextPrice = promotionPrice && promotionPrice.value ? promotionPrice.value : products[ i + 1 ].priceValue;\r",
+							"    } else {\r",
+							"      nextPrice = products[ i + 1 ].priceValue;\r",
+							"    }\r",
+							"        pm.expect(currentPrice).to.be.at.most(nextPrice, `Product at index ${i} with price ${currentPrice} should be before product at index ${i + 1} with price ${nextPrice}`);\r",
+							"    }\r",
+							"});\r",
+							"\r",
+							"// Page and category navigation logic\r",
+							"let currentPage = pm.environment.get(\"currentPage\");\r",
+							"let totalPages = responseData.pagination.numberOfPages;\r",
+							"\r",
+							"if (currentPage < totalPages - 1) {\r",
+							"    // If next page exists, increase pageNumber and set next request to the same category\r",
+							"    pm.environment.set(\"currentPage\", currentPage + 1);\r",
+							"    pm.execution.setNextRequest(\"Verify Products Sorted by Price Ascending\"); // Replace with actual request name\r",
+							"} else {\r",
+							"    // If this is the last page in the category, reset pageNumber and switch to the next category\r",
+							"    console.log(\"All pages in this category have been processed.\");\r",
+							"    pm.environment.unset(\"currentPage\"); // Reset for the new category\r",
+							"    \r",
+							"    // Check if there is another category\r",
+							"    if (categories.children[categoryCounter + 1]) {\r",
+							"        console.log(\"Switching to the next category...\");\r",
+							"        pm.environment.set('categoryCounter', categoryCounter + 1); // Increment categoryCounter\r",
+							"        pm.execution.setNextRequest('Verify Products Sorted by Price Ascending');  // Set to the next category request\r",
+							"    } else {\r",
+							"        // If no more categories, end the test\r",
+							"        console.log(\"All categories have been processed.\");\r",
+							"         pm.environment.unset('categoryCounter');\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size=100&page={{currentPage}}&sort=price-asc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "100"
+						},
+						{
+							"key": "page",
+							"value": "{{currentPage}}"
+						},
+						{
+							"key": "sort",
+							"value": "price-asc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get productlist within category",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"",
+							"// Get the categories and the categoryCounter from pm.variables",
+							"let categories = pm.variables.get('categoryData');",
+							"let categoryCounter = pm.variables.get('categoryCounter');",
+							"",
+							"// Get the category part of the url and set it as an environment variable",
+							"let urlCategoryPart = categories.children[categoryCounter].url;",
+							"pm.environment.set('urlCategoryPart',urlCategoryPart);",
+							"",
+							"// Add 1 to the categoryCounter environment variable",
+							"pm.variables.set('categoryCounter', categoryCounter + 1);"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Get the categories and the categoryCounter from pm.variables",
+							"let categories = pm.variables.get('categoryData');",
+							"let categoryCounter = pm.variables.get('categoryCounter');",
+							"",
+							"// Tests",
+							"",
+							"// Check that the status code is 200 (OK)",
+							"pm.test('The status code of the response should be 200', () => {",
+							"  pm.response.to.have.status(200);",
+							"});",
+							"",
+							"// Check that we have a response time of < 1 second",
+							"pm.test('The response time should be below 1 second', () => {",
+							"    pm.expect(pm.response.responseTime).to.be.below(1000);",
+							"});",
+							"",
+							"// Check that we have at least one product in the this main category",
+							"let responseData = pm.response.json();",
+							"pm.test('There should be at least one product in a main category', () => {",
+							"    pm.expect(responseData.results.length).to.be.at.least(1);",
+							"});",
+							"",
+							"",
+							"// Repeat/loop this request until we have requested all main categories",
+							"if(categories.children[categoryCounter]){",
+							"  // Repeat this request (with new variable data for the url)",
+							"  pm.execution.setNextRequest('Get productlist within category');",
+							"}",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size=30&page=0&sort=topRated",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "topRated"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get category - Kott, Chark och Fagel",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"pm.environment.set('domain', 'http://localhost:4000');"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Each product should have a valid 'img' property\", function () {\r",
+							"    pm.expect(pm.response.json().results).to.be.an('array').that.is.not.empty;\r",
+							"    \r",
+							"    pm.response.json().results.forEach((product, index) => {\r",
+							"        console.log(`Checking product at index ${index}:`, product);\r",
+							"        \r",
+							"        pm.expect(product).to.have.property('image').that.is.an('object').and.to.have.property('url').that.is.a('string').and.is.not.empty;\r",
+							"        \r",
+							"       \r",
+							"    });\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"    \r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							"    \r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'compareprice-asc'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('compareprice-asc');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults;\r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Ensure there are products on the first page\", function () {\r",
+							"    pm.expect(pm.response.json().results.length).to.be.greaterThan(0);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"let responseJson = pm.response.json();\r",
+							"\r",
+							"\r",
+							"pm.test(\"Results should be an array and not empty\", function () {\r",
+							"    pm.expect(responseJson.results).to.be.an('array').that.is.not.empty;\r",
+							"});\r",
+							"\r",
+							"\r",
+							"responseJson.results.forEach(function(product, index) {\r",
+							"    \r",
+							"    pm.test(`Product ${index + 1} should have a valid 'price.value'`, function() {\r",
+							"        let price = product.price;\r",
+							"        \r",
+							"        if (price && price.value !== undefined) {\r",
+							"            pm.expect(price.value).to.be.a('number').that.is.greaterThan(0);\r",
+							"        } else {\r",
+							"            pm.expect(price).to.exist; \r",
+							"        }\r",
+							"    });\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/kott-chark-och-fagel?size=30&page=0&sort=compareprice-asc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"kott-chark-och-fagel"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "compareprice-asc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get category - Vegetariskt",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Each product should have a valid 'img' property\", function () {\r",
+							"    pm.expect(pm.response.json().results).to.be.an('array').that.is.not.empty;\r",
+							"    \r",
+							"    pm.response.json().results.forEach((product, index) => {\r",
+							"       \r",
+							"        console.log(`Checking product at index ${index}:`, product);\r",
+							"        \r",
+							"        pm.expect(product).to.have.property('image').that.is.an('object').and.to.have.property('url').that.is.a('string').and.is.not.empty;\r",
+							"        \r",
+							"       \r",
+							"    });\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"    \r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							"\r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'topRated'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('topRated');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults; \r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Ensure there are products on the first page\", function () {\r",
+							"    pm.expect(pm.response.json().results.length).to.be.greaterThan(0);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"let responseJson = pm.response.json();\r",
+							"\r",
+							"\r",
+							"pm.test(\"Results should be an array and not empty\", function () {\r",
+							"    pm.expect(responseJson.results).to.be.an('array').that.is.not.empty;\r",
+							"});\r",
+							"\r",
+							"\r",
+							"responseJson.results.forEach(function(product, index) {\r",
+							"    \r",
+							"    pm.test(`Product ${index + 1} should have a valid 'price.value'`, function() {\r",
+							"        let price = product.price;\r",
+							"        \r",
+							"        if (price && price.value !== undefined) {\r",
+							"            pm.expect(price.value).to.be.a('number').that.is.greaterThan(0);\r",
+							"        } else {\r",
+							"            pm.expect(price).to.exist; \r",
+							"        }\r",
+							"    });\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/vegetariskt?size=30&page=0&sort=topRated",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"vegetariskt"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "topRated"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Specific Product - Belgian Chocolate Glass",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Product should have a valid 'image.url' and 'thumbnail.url'\", function () {\r",
+							"    \r",
+							"    const imageUrl = pm.response.json().image.url;\r",
+							"    pm.expect(imageUrl).to.be.a('string').that.is.not.empty;\r",
+							"    pm.expect(imageUrl).to.match(/^https?:\\/\\/[^\\s$.?#].[^\\s]*$/); \r",
+							"\r",
+							"    const thumbnailUrl = pm.response.json().thumbnail.url;\r",
+							"    pm.expect(thumbnailUrl).to.be.a('string').that.is.not.empty;\r",
+							"    pm.expect(thumbnailUrl).to.match(/^https?:\\/\\/[^\\s$.?#].[^\\s]*$/);  \r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Description should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const description = response.description;\r",
+							"\r",
+							"    pm.expect(description).to.not.be.empty;\r",
+							"    pm.expect(description).to.be.a('string');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Consumer storage instructions should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const storageInstructions = response.consumerStorageInstructions;\r",
+							"\r",
+							"    pm.expect(storageInstructions).to.not.be.empty;\r",
+							"    pm.expect(storageInstructions).to.be.a('string');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Ingredients should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const ingredients = response.ingredients;\r",
+							"\r",
+							"    pm.expect(ingredients).to.not.be.empty;\r",
+							"    pm.expect(ingredients).to.be.a('string');\r",
+							"});\r",
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/axfood/rest/p/101277252_ST",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"axfood",
+						"rest",
+						"p",
+						"101277252_ST"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get category - Mejeri, Ost och Agg",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"    \r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							"    \r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'name-asc'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('name-asc');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults;  \r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/mejeri-ost-och-agg?size=30&page=0&sort=name-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"mejeri-ost-och-agg"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "name-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Products Sorted by Name Ascending",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"pm.environment.set('domain', 'http://localhost:4000');\r",
+							"// Retrieve category data from environment variables\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"// console.log('Categories:', categories);\r",
+							"\r",
+							"// Check if categoryCounter is initialized in the environment\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"if (categoryCounter === undefined) {\r",
+							"    categoryCounter = 0; \r",
+							"    pm.environment.set('categoryCounter', categoryCounter); \r",
+							"}\r",
+							"// console.log('Category Counter:', categoryCounter);\r",
+							"\r",
+							"// Verify that categories and categoryCounter are valid\r",
+							"if (!categories || !categories.children || categories.children.length === 0) {\r",
+							"    console.error('Error: categories data is empty or malformed!');\r",
+							"    return;\r",
+							"}\r",
+							"\r",
+							"if (categoryCounter >= categories.children.length) {\r",
+							"    console.log(\"All categories have been processed.\");\r",
+							"    pm.execution.setNextRequest(null);  // End if no more categories\r",
+							"} else {\r",
+							"    // Retrieve the URL part for the current category and set it as an environment variable\r",
+							"    let urlCategoryPart = categories.children[categoryCounter].url;\r",
+							"    pm.environment.set('urlCategoryPart', urlCategoryPart);\r",
+							"    console.log('URL Part for current category:', urlCategoryPart);\r",
+							"\r",
+							"    // Initialize pageNumber only once at the beginning of each category\r",
+							"    if (!pm.environment.get(\"pageNumber\")) {\r",
+							"        pm.environment.set(\"pageNumber\", 0);\r",
+							"        console.log(\"Page number initialized to 0 for new category.\");\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"let products = responseData.results;\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"\r",
+							"// Check that the sort parameter is set to \"name-asc\"\r",
+							"pm.test('Sort parameter should be set to name-asc', () => {\r",
+							"    let selectedSort = responseData.sorts.find(sort => sort.code === 'name-asc');\r",
+							"    pm.expect(selectedSort.selected).to.be.true;\r",
+							"});\r",
+							"\r",
+							"// Check that products are sorted by \"name\" field in ascending order\r",
+							"pm.test('Products should be sorted by name in ascending order (A–Z)', () => {\r",
+							"    for (let i = 0; i < products.length - 1; i++) {\r",
+							"        let currentName = products[i].name.toLowerCase();\r",
+							"        let nextName = products[i + 1].name.toLowerCase();\r",
+							"        pm.expect(currentName <= nextName, `Product at index ${i} with name \"${currentName}\" should be before product at index ${i + 1} with name \"${nextName}\"`);\r",
+							"    }\r",
+							"});\r",
+							"\r",
+							"// Page and category navigation logic\r",
+							"let currentPage = pm.environment.get(\"pageNumber\");\r",
+							"let totalPages = responseData.pagination.numberOfPages;\r",
+							"\r",
+							"if (currentPage < totalPages - 1) {\r",
+							"    // If next page exists, increase pageNumber and set next request to the same category\r",
+							"    pm.environment.set(\"pageNumber\", currentPage + 1);\r",
+							"    pm.execution.setNextRequest(\"Verify Products Sorted by Name Ascending\"); // Replace with actual request name\r",
+							"} else {\r",
+							"    // If this is the last page in the category, reset pageNumber and switch to the next category\r",
+							"    console.log(\"All pages in this category have been processed.\");\r",
+							"    pm.environment.unset(\"pageNumber\"); // Reset for the new category\r",
+							"    \r",
+							"    // Check if there is another category\r",
+							"    if (categories.children[categoryCounter + 1]) {\r",
+							"        console.log(\"Switching to the next category...\");\r",
+							"        pm.environment.set('categoryCounter', categoryCounter + 1); // Increment categoryCounter\r",
+							"        pm.execution.setNextRequest('Verify Products Sorted by Name Ascending');  // Set to the next category request\r",
+							"    } else {\r",
+							"        // If no more categories, end the test\r",
+							"        console.log(\"All categories have been processed.\");\r",
+							"        pm.environment.unset('categoryCounter');\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size=100&page={{pageNumber}}&sort=name-asc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "100"
+						},
+						{
+							"key": "page",
+							"value": "{{pageNumber}}"
+						},
+						{
+							"key": "sort",
+							"value": "name-asc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Subcategory - Mjolk",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"     \r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							"    \r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'compareprice-desc'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('compareprice-desc');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults; \r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/mejeri-ost-och-agg/mjolk?size=30&page=0&sort=compareprice-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"mejeri-ost-och-agg",
+						"mjolk"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "compareprice-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Products Sorted by Price Descending",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							"// Retrieve category data from environment variables\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"\r",
+							"// Check if categoryCounter is initialized in the environment\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"if (categoryCounter === undefined) {\r",
+							"    categoryCounter = 0; \r",
+							"    pm.environment.set('categoryCounter', categoryCounter); \r",
+							"}\r",
+							"\r",
+							"// Verify that categories and categoryCounter are valid\r",
+							"if (!categories || !categories.children || categories.children.length === 0) {\r",
+							"    console.error('Error: categories data is empty or malformed!');\r",
+							"    return;\r",
+							"}\r",
+							"\r",
+							"if (categoryCounter >= categories.children.length) {\r",
+							"    console.log(\"All categories have been processed.\");\r",
+							"    pm.execution.setNextRequest(null);  // End if no more categories\r",
+							"} else {\r",
+							"    // Retrieve the URL part for the current category and set it as an environment variable\r",
+							"    let urlCategoryPart = categories.children[categoryCounter].url;\r",
+							"    pm.environment.set('urlCategoryPart', urlCategoryPart);\r",
+							"    console.log('URL Part for current category:', urlCategoryPart);\r",
+							"\r",
+							"    // Initialize pageNumber only once at the beginning of each category\r",
+							"    if (!pm.environment.get(\"currentPage\")) {\r",
+							"        pm.environment.set(\"currentPage\", 0);\r",
+							"        console.log(\"Page number initialized to 0 for new category.\");\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"let products = responseData.results;\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"\r",
+							"// Check that the sort parameter is set to \"price-desc\"\r",
+							"pm.test('Sort parameter should be set to price-desc', () => {\r",
+							"    let selectedSort = responseData.sorts.find(sort => sort.code === 'price-desc');\r",
+							"    pm.expect(selectedSort.selected).to.be.true;\r",
+							"});\r",
+							"\r",
+							"// Check that products are sorted by \"priceValue\" field in descending order\r",
+							"pm.test('Products should be sorted by price in descending order (most expensive to cheapest)', () => {\r",
+							"    for ( let i = 0; i < products.length - 1; i++ ) {\r",
+							"    // Determine the current product's price\r",
+							"    let currentPrice;\r",
+							"    if ( products[ i ].potentialPromotions && products[ i ].potentialPromotions.length > 0 ) {\r",
+							"      const promotionPrice = products[ i ].potentialPromotions[ 0 ].price;\r",
+							"      currentPrice = promotionPrice && promotionPrice.value ? promotionPrice.value : products[ i ].priceValue;\r",
+							"    } else {\r",
+							"      currentPrice = products[ i ].priceValue;\r",
+							"    }\r",
+							"\r",
+							"    // Determine the next product's price\r",
+							"    let nextPrice;\r",
+							"    if ( products[ i + 1 ].potentialPromotions && products[ i + 1 ].potentialPromotions.length > 0 ) {\r",
+							"      const promotionPrice = products[ i + 1 ].potentialPromotions[ 0 ].price;\r",
+							"      nextPrice = promotionPrice && promotionPrice.value ? promotionPrice.value : products[ i + 1 ].priceValue;\r",
+							"    } else {\r",
+							"      nextPrice = products[ i + 1 ].priceValue;\r",
+							"    }\r",
+							"        pm.expect(currentPrice).to.be.at.least(nextPrice, `Product at index ${i} with price ${currentPrice} should be before product at index ${i + 1} with price ${nextPrice}`);\r",
+							"    }\r",
+							"});\r",
+							"\r",
+							"// Page and category navigation logic\r",
+							"let currentPage = pm.environment.get(\"currentPage\");\r",
+							"let totalPages = responseData.pagination.numberOfPages;\r",
+							"\r",
+							"if (currentPage < totalPages - 1) {\r",
+							"    // If next page exists, increase pageNumber and set next request to the same category\r",
+							"    pm.environment.set(\"currentPage\", currentPage + 1);\r",
+							"    pm.execution.setNextRequest(\"Verify Products Sorted by Price Descending\"); // Replace with actual request name\r",
+							"} else {\r",
+							"    // If this is the last page in the category, reset pageNumber and switch to the next category\r",
+							"    console.log(\"All pages in this category have been processed.\");\r",
+							"    pm.environment.unset(\"currentPage\"); // Reset for the new category\r",
+							"    \r",
+							"    // Check if there is another category\r",
+							"    if (categories.children[categoryCounter + 1]) {\r",
+							"        console.log(\"Switching to the next category...\");\r",
+							"        pm.environment.set('categoryCounter', categoryCounter + 1); // Increment categoryCounter\r",
+							"        pm.execution.setNextRequest('Verify Products Sorted by Price Descending');  // Set to the next category request\r",
+							"    } else {\r",
+							"        // If no more categories, end the test\r",
+							"        console.log(\"All categories have been processed.\");\r",
+							"        pm.environment.unset('categoryCounter');\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size=100&page={{currentPage}}&sort=price-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "100"
+						},
+						{
+							"key": "page",
+							"value": "{{currentPage}}"
+						},
+						{
+							"key": "sort",
+							"value": "price-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get category - Dryck",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"    \r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							"    \r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'name-desc'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('name-desc');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults; \r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/dryck?size=30&page=0&sort=name-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"dryck"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "name-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Products Sorted by Name Descending",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							"// Retrieve category data from environment variables\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"\r",
+							"// Check if categoryCounter is initialized in the environment\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"if (categoryCounter === undefined) {\r",
+							"    categoryCounter = 0; \r",
+							"    pm.environment.set('categoryCounter', categoryCounter); \r",
+							"}\r",
+							"\r",
+							"// Verify that categories and categoryCounter are valid\r",
+							"if (!categories || !categories.children || categories.children.length === 0) {\r",
+							"    console.error('Error: categories data is empty or malformed!');\r",
+							"    return;\r",
+							"}\r",
+							"\r",
+							"if (categoryCounter >= categories.children.length) {\r",
+							"    console.log(\"All categories have been processed.\");\r",
+							"    pm.execution.setNextRequest(null);  // End if no more categories\r",
+							"} else {\r",
+							"    // Retrieve the URL part for the current category and set it as an environment variable\r",
+							"    let urlCategoryPart = categories.children[categoryCounter].url;\r",
+							"    pm.environment.set('urlCategoryPart', urlCategoryPart);\r",
+							"    console.log('URL Part for current category:', urlCategoryPart);\r",
+							"\r",
+							"    // Initialize pageNumber only once at the beginning of each category\r",
+							"    if (!pm.environment.get(\"pageNumber\")) {\r",
+							"        pm.environment.set(\"pageNumber\", 0);\r",
+							"        console.log(\"Page number initialized to 0 for new category.\");\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"let products = responseData.results;\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"let categoryCounter = pm.environment.get('categoryCounter');\r",
+							"\r",
+							"// Check that the sort parameter is set to \"name-desc\"\r",
+							"pm.test('Sort parameter should be set to name-desc', () => {\r",
+							"    let selectedSort = responseData.sorts.find(sort => sort.code === 'name-desc');\r",
+							"    pm.expect(selectedSort.selected).to.be.true;\r",
+							"});\r",
+							"\r",
+							"// Check that products are sorted by \"name\" field in descending order (Z–A)\r",
+							"pm.test('Products should be sorted by name in descending order (Z–A)', () => {\r",
+							"    for (let i = 0; i < products.length - 1; i++) {\r",
+							"        let currentName = products[i].name.toLowerCase();\r",
+							"        let nextName = products[i + 1].name.toLowerCase();\r",
+							"        pm.expect(currentName >= nextName, `Product at index ${i} with name \"${currentName}\" should be after product at index ${i + 1} with name \"${nextName}\"`);\r",
+							"    }\r",
+							"});\r",
+							"\r",
+							"// Page and category navigation logic\r",
+							"let currentPage = pm.environment.get(\"pageNumber\");\r",
+							"let totalPages = responseData.pagination.numberOfPages;\r",
+							"\r",
+							"if (currentPage < totalPages - 1) {\r",
+							"    // If next page exists, increase pageNumber and set next request to the same category\r",
+							"    pm.environment.set(\"pageNumber\", currentPage + 1);\r",
+							"    pm.execution.setNextRequest(\"Verify Products Sorted by Name Descending\"); // Replace with actual request name\r",
+							"} else {\r",
+							"    // If this is the last page in the category, reset pageNumber and switch to the next category\r",
+							"    console.log(\"All pages in this category have been processed.\");\r",
+							"    pm.environment.unset(\"pageNumber\"); // Reset for the new category\r",
+							"    \r",
+							"    // Check if there is another category\r",
+							"    if (categories.children[categoryCounter + 1]) {\r",
+							"        console.log(\"Switching to the next category...\");\r",
+							"        pm.environment.set('categoryCounter', categoryCounter + 1); // Increment categoryCounter\r",
+							"        pm.execution.setNextRequest('Verify Products Sorted by Name Descending');  // Set to the next category request\r",
+							"    } else {\r",
+							"        // If no more categories, end the test\r",
+							"        console.log(\"All categories have been processed.\");\r",
+							"        pm.environment.unset('categoryCounter');\r",
+							"    }\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size=100&page={{pageNumber}}&sort=name-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "100"
+						},
+						{
+							"key": "page",
+							"value": "{{pageNumber}}"
+						},
+						{
+							"key": "sort",
+							"value": "name-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Produckt list and  pagination",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							"// Unpack category data from environment variable as JSON\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"\r",
+							"// Get the category counter and convert it to a number\r",
+							"let categoryCounter = Number(pm.variables.get('categoryCounter')) || 0;\r",
+							"\r",
+							"// Ensure the current category exists before proceeding\r",
+							"if (categories.children && categories.children[categoryCounter]) {\r",
+							"    // Set the URL part for the current category\r",
+							"    let urlCategoryPart = categories.children[categoryCounter].url;\r",
+							"\r",
+							"    // Skip the category \"lotter\"\r",
+							"    if (urlCategoryPart === 'lotter') {\r",
+							"        console.log('Skipping category: lotter');\r",
+							"        // Increase the category counter to move to the next category\r",
+							"        pm.variables.set('categoryCounter', categoryCounter + 1);  \r",
+							"    } else {\r",
+							"        // Process the current category\r",
+							"        pm.environment.set('urlCategoryPart', urlCategoryPart);\r",
+							"        // Increase the category counter for the next request\r",
+							"        pm.variables.set('categoryCounter', categoryCounter + 1);\r",
+							"    }\r",
+							"} else {\r",
+							"    console.log('All categories have been processed.');\r",
+							"    pm.environment.unset('categoryCounter'); // Clear counter after last category\r",
+							"    pm.environment.unset('urlCategoryPart'); // Clear URL part\r",
+							"}\r",
+							"\r",
+							"// Set page size for the request\r",
+							"pm.variables.set('pageSize', 20);\r",
+							"\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Unpack category data from environment variable as JSON\r",
+							"let categories = pm.variables.get('categoryData');\r",
+							"\r",
+							"// Get the current category counter\r",
+							"let categoryCounter = Number(pm.variables.get('categoryCounter')) || 0;\r",
+							"\r",
+							"// Test that the status code is 200 (OK)\r",
+							"pm.test('The status code of the response should be 200', () => {\r",
+							"  pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"// Test that the response time is below 1 second\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"  pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"// Parse the response data\r",
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"// Test that there is the expected number of products on the page\r",
+							"pm.test(`There should be exactly ${pm.variables.get('pageSize')} products on the page`, () => {\r",
+							"  pm.expect(responseData.results).to.be.an('array');\r",
+							"  pm.expect(responseData.results.length).to.eql(pm.variables.get('pageSize'));\r",
+							"});\r",
+							"\r",
+							"// Validate pagination data if it exists\r",
+							"pm.test('Pagination data should be valid', () => {\r",
+							"  pm.expect(responseData.pagination).to.be.an('object');\r",
+							"  pm.expect(responseData.pagination.pageSize).to.eql(pm.variables.get('pageSize'));\r",
+							"  pm.expect(responseData.pagination.currentPage).to.be.a('number');\r",
+							"  pm.expect(responseData.pagination.numberOfPages).to.be.above(0);\r",
+							"  pm.expect(responseData.pagination.totalNumberOfResults).to.be.a('number');\r",
+							"  pm.expect(responseData.pagination.totalNumberOfResults).to.be.above(0);\r",
+							"});\r",
+							"\r",
+							"// Check if we should proceed with the next category\r",
+							"if (categories.children && categories.children[categoryCounter]) {\r",
+							"    pm.execution.setNextRequest('Product List and Pagination Validation');\r",
+							"} else {\r",
+							"    console.log('All categories have been processed or the category is excluded.');\r",
+							"    pm.environment.unset('categoryCounter');\r",
+							"    pm.environment.unset('urlCategoryPart');\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/{{urlCategoryPart}}?size={{pageSize}}&page=0&sort=topRated",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"{{urlCategoryPart}}"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "{{pageSize}}"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "topRated"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get category - Barn",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let responseData = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Status code is 200\", function () {\r",
+							"    pm.response.to.have.status(200);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test('The response time should be below 1 second', () => {\r",
+							"     pm.expect(pm.response.responseTime).to.be.below(1000);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should be present and not empty\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.not.be.empty;\r",
+							"    pm.expect(categoryInfo).to.be.an('object');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info should contain required fields\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo).to.have.property('code');\r",
+							"    pm.expect(categoryInfo).to.have.property('name');\r",
+							"    pm.expect(categoryInfo).to.have.property('url');\r",
+							"    pm.expect(categoryInfo).to.have.property('sequence');\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Category Info 'code' should follow the expected format\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const categoryInfo = response.categoryInfo;\r",
+							"\r",
+							"    pm.expect(categoryInfo.code).to.match(/^[A-Za-z0-9]+$/);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The correct sorting option is selected\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sorts = response.sorts;\r",
+							"    \r",
+							"    const selectedSort = sorts.find(sort => sort.selected === true);\r",
+							"\r",
+							"    pm.expect(selectedSort).to.not.be.undefined;\r",
+							" \r",
+							"    pm.expect(selectedSort.code).to.be.oneOf([\r",
+							"        \"topRated\", \r",
+							"        \"name-asc\", \r",
+							"        \"name-desc\", \r",
+							"        \"price-asc\", \r",
+							"        \"price-desc\", \r",
+							"        \"compareprice-asc\", \r",
+							"        \"compareprice-desc\"\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Current page should be within valid range\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const currentPage = response.pagination.currentPage;\r",
+							"    const totalPages = response.pagination.numberOfPages;\r",
+							"\r",
+							"    pm.expect(currentPage).to.be.a('number').that.is.greaterThanOrEqual(0).and.is.lessThan(totalPages);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"The sort option should be 'price-desc'\", function () {\r",
+							"    const response = pm.response.json();\r",
+							"    const sort = response.pagination.sort;\r",
+							"\r",
+							"    pm.expect(sort).to.equal('price-desc');\r",
+							"});\r",
+							"\r",
+							"\r",
+							"const pageSize = pm.response.json().pagination.pageSize; \r",
+							"const totalResults = pm.response.json().pagination.totalNumberOfResults; \r",
+							"const numberOfPages = pm.response.json().pagination.numberOfPages; \r",
+							"\r",
+							"const maxExpectedResults = pageSize * numberOfPages;\r",
+							"\r",
+							"const allProductsInCategoriesCount = pm.response.json().pagination.allProductsInCategoriesCount;\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products matches pagination\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.eql(totalResults);\r",
+							"});\r",
+							"\r",
+							"\r",
+							"pm.test(\"Total number of products is within expected range\", function () {\r",
+							"    pm.expect(allProductsInCategoriesCount).to.be.lessThanOrEqual(maxExpectedResults);\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{domain}}/api/c/barn?size=30&page=0&sort=price-desc",
+					"host": [
+						"{{domain}}"
+					],
+					"path": [
+						"api",
+						"c",
+						"barn"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "30"
+						},
+						{
+							"key": "page",
+							"value": "0"
+						},
+						{
+							"key": "sort",
+							"value": "price-desc"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

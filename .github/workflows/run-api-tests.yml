@@ -1,41 +1,63 @@
-name: CI Pipeline
+name: Node.js CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+env:
+  FORCE_COLOR: "2"
 
 jobs:
-  test:
-    name: Run Tests
+  tests:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        node-version: [20.x]
+        test-collection:
+          - categories
+          - pagination
+          - sorting-name-A-Z
+          - sorting-name-Z-A
+          - sorting-price-asc
+          - sorting-price-desc
+          
+          
     steps:
-      # 1.Clone
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      # 2. Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18 
-
-      # 3. Dependencies
-      - name: Install dependencies
-        run: npm install
-
-      # 4. Newman 
-      - name: Run Newman tests
-        run: newman run postman-collections\mataffaren.postman_collection.json
-
-      # 5. Cucumber 
-      - name: Run Cucumber tests
-        run: npm test
-
-      
-      - name: Build Project
-        run: npm run build
+    - uses: actions/checkout@v4
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v2
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    - run: npm ci
+    - name: Start backend
+      run: nohup node backend/index.js &
+    - name: Wait for backend to be available
+      run: npx wait-on tcp:4000
+    - name: Run tests and save HTML report with htmlextra
+      run: |
+        mkdir -p reports
+        npx newman run postman-collections/${{ matrix.test-collection }}.postman_collection.json \
+        --reporters cli,htmlextra \
+        --reporter-htmlextra-export reports/${{ matrix.test-collection }}_report.html
+    - name: Upload test report as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.test-collection }}-report
+        path: reports/${{ matrix.test-collection }}_report.html
+    - name: Send report to Discord
+      if: always()
+      run: |
+       ARTIFACT_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+       REPORT_PATH=reports/${{ matrix.test-collection }}_report.html
+       curl -X POST -H "Content-Type: multipart/form-data" \
+       -F "content=Test completed for collection: ${{ matrix.test-collection }}. [View artifacts](${ARTIFACT_URL})" \
+       -F "file=@$REPORT_PATH" \
+       https://discordapp.com/api/webhooks/1227220027183337524/THqo7lSXDCzLEDI3W8KeSNTGy2qNGGRpmciSlUf-Wj9EJsFv6kN8W7qDuZej0j5m2htS || \
+       curl -X POST -H "Content-Type: application/json" \
+       -d "{
+        \"content\": \"Test completed for collection: ${{ matrix.test-collection }}. HTML report could not be attached. [View artifacts](${ARTIFACT_URL})\"
+       }" \
+       https://discordapp.com/api/webhooks/1227220027183337524/THqo7lSXDCzLEDI3W8KeSNTGy2qNGGRpmciSlUf-Wj9EJsFv6kN8W7qDuZej0j5m2htS

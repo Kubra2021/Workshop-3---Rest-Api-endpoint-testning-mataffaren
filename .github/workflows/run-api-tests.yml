@@ -30,7 +30,7 @@ jobs:
 
       # 4. Newman 
       - name: Run Newman tests
-        run: newman run C:\Users\erkub\Desktop\endpoint-testning-mataffaren-cucumber-chai-fetch\postman-collections\mataffaren.postman_collection.json
+        run: newman run postman-collections\mataffaren.postman_collection.json
 
       # 5. Cucumber 
       - name: Run Cucumber tests

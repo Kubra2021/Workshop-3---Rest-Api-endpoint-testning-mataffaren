@@ -16,12 +16,8 @@ jobs:
       matrix:
         node-version: [20.x]
         test-collection:
-          - categories
-          - pagination
-          - sorting-name-A-Z
-          - sorting-name-Z-A
-          - sorting-price-asc
-          - sorting-price-desc
+          - mataffaren
+        
           
           
     steps:
